@@ -137,8 +137,7 @@
     let isClaimWaitMode;
     let claimWaitPeriodMinutes;
     let isErrorStateRestartEnabled;
-
-    const initializeVariables = async () => {
+const initializeVariables = async () => {
         lastClaimTime = await GM.getValue('pond0xLastClaimTime', 0);
         reloadReason = await GM.getValue('pond0xReloadReason', 'Initial Load');
         isPaused = await GM.getValue('pond0xMinerIsPaused', false);
@@ -152,25 +151,10 @@
         historicalClaims = JSON.parse(await GM.getValue('pond0xHistoricalClaims', '[]'));
         dailyClaims = JSON.parse(await GM.getValue('pond0xDailyClaims', '{}'));
         autominerManuallyStarted = await GM.getValue('pond0xAutominerStarted', false);
-        const resumeAfterWait = await GM.getValue('pond0xResumeAfterWait', false);
-        const lastClaimTimeStored = await GM.getValue('pond0xLastClaimTime', 0);
-        const waitUntil = await GM.getValue('pond0xWaitUntil', 0);
         if (pageReloadsStored > 0) {
-            if (resumeAfterWait || (isClaimWaitMode && lastClaimTimeStored > 0 && waitUntil <= getTime() && (getTime() - lastClaimTimeStored) < (claimWaitPeriodMinutes * 60 + 300))) {
-                autominerManuallyStarted = true;
-                await GM.setValue('pond0xAutominerStarted', true);
-                console.log(`${lh} - Preserved autominerManuallyStarted as true on page reload due to claim + wait resumption`);
-                setTimeout(async () => {
-                    console.log(`${lh} - Manual mode: Triggering mining post-reload after wait period`);
-                    await waitForPageLoad(30, 1000);
-                    await startMining();
-                }, 1000);
-            } else {
-                autominerManuallyStarted = false;
-                await GM.setValue('pond0xAutominerStarted', false);
-                await GM.setValue('pond0xResumeAfterWait', false);
-                console.log(`${lh} - Reset autominerManuallyStarted to false on page reload`);
-            }
+            autominerManuallyStarted = false;
+            await GM.setValue('pond0xAutominerStarted', false);
+            console.log(`${lh} - Reset autominerManuallyStarted to false on page reload`);
         }
         watchdogInterval = 5 * 60 * 1000;
         claimIntervalMinutes = await GM.getValue('pond0xClaimIntervalMinutes', 150);
@@ -200,32 +184,28 @@
         pageReloads = pageReloadsStored + 1;
         await GM.setValue('pond0xPageReloads', pageReloads);
 
-        const waitUntilStored = await GM.getValue('pond0xWaitUntil', 0);
-        if (isClaimWaitMode && waitUntilStored > getTime()) {
+        const waitUntil = await GM.getValue('pond0xWaitUntil', 0);
+        if (isClaimWaitMode && waitUntil > getTime()) {
             isPaused = true;
             await GM.setValue('pond0xMinerIsPaused', true);
-            console.log(`${lh} - Resuming wait from previous claim, pausing until ${new Date(waitUntilStored * 1000).toISOString()}`);
+            console.log(`${lh} - Resuming wait from previous claim, pausing until ${new Date(waitUntil * 1000).toISOString()}`);
             setTimeout(async () => {
                 isPaused = false;
                 await GM.setValue('pond0xMinerIsPaused', false);
                 console.log(`${lh} - Wait period completed, resuming...`);
                 if (!isAutoMode) {
-                    autominerManuallyStarted = true;
-                    await GM.setValue('pond0xAutominerStarted', true);
-                    await GM.setValue('pond0xResumeAfterWait', true);
                     const toggleMiningBtn = document.getElementById('toggleMiningBtn');
                     if (toggleMiningBtn) {
-                        toggleMiningBtn.textContent = 'Stop Manual Mining';
-                        toggleMiningBtn.style.background = '#dc3545';
+                        toggleMiningBtn.textContent = 'Start Manual Mining';
+                        toggleMiningBtn.style.background = '#28a745';
                     }
-                    console.log(`${lh} - Manual mode: Triggering mining resume after wait period`);
-                    await startMining();
                 }
-            }, (waitUntilStored - getTime()) * 1000);
+            }, (waitUntil - getTime()) * 1000);
         }
     };
     await initializeVariables();
-if (window.location.href.startsWith('https://cary0x.github.io/status-mini/')) {
+
+    if (window.location.href.startsWith('https://cary0x.github.io/status-mini/')) {
         console.log(`${lh} - Running on status-mini page, starting continuous status polling...`);
 
         const scrapeStatusContinuously = () => {
@@ -279,8 +259,7 @@ if (window.location.href.startsWith('https://cary0x.github.io/status-mini/')) {
 
         return;
     }
-
-    const performDailyReset = async () => {
+const performDailyReset = async () => {
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const lastResetDate = new Date(await GM.getValue('pond0xLastResetDate', '1970-01-01'));
@@ -463,7 +442,8 @@ if (window.location.href.startsWith('https://cary0x.github.io/status-mini/')) {
             console.log(`${lh} - Message event listener added. Waiting for continuous miningStatus messages...`);
         });
     };
-const startMining = async () => {
+
+    const startMining = async () => {
         if (statusLock) {
             console.log(`${lh} - Start mining skipped: statusLock=${statusLock}`);
             return;
@@ -473,47 +453,38 @@ const startMining = async () => {
         let mineButtonRetries = 0;
         const maxMineButtonRetries = 4;
         const retryDelay = 2000;
-        const maxReloadAttempts = 3;
 
         let mineBtn = searchNodeByContent('button', 'Mine');
-        while (!mineBtn && mineButtonRetries < maxMineButtonRetries) {
+        while (!mineBtn && mineButtonRetries < maxMineButtonRetries && isAutoMode) {
             console.log(`${lh} - Mine button not found (attempt ${mineButtonRetries + 1}/${maxMineButtonRetries}). Retrying in ${retryDelay / 1000}s...`);
             await new Promise(resolve => setTimeout(resolve, retryDelay));
             mineBtn = searchNodeByContent('button', 'Mine');
             mineButtonRetries++;
         }
 
-        if (!mineBtn) {
-            const reloadAttempts = await GM.getValue('pond0xMineButtonReloadAttempts', 0);
-            if (reloadAttempts < maxReloadAttempts) {
-                console.warn(`${lh} - No Mine button found after ${maxMineButtonRetries} retries in ${isAutoMode ? 'Auto' : 'Manual'} Mode. Reloading page (attempt ${reloadAttempts + 1}/${maxReloadAttempts})...`);
-                notifyUser('Pond0x Warning', `No Mine button found after ${maxMineButtonRetries} retries. Reloading page...`);
-                pageReloads++;
-                reloadReason = `Mine Button Not Found (${isAutoMode ? 'Auto' : 'Manual'} Mode)`;
-                await GM.setValue('pond0xPageReloads', pageReloads);
-                await GM.setValue('pond0xReloadReason', reloadReason);
-                await GM.setValue('pond0xMineButtonReloadAttempts', reloadAttempts + 1);
-                window.location.href = 'https://www.pond0x.com/mining';
-                statusLock = false;
-                return;
-            } else {
-                console.error(`${lh} - No Mine button found after ${maxMineButtonRetries} retries and ${reloadAttempts} reloads in ${isAutoMode ? 'Auto' : 'Manual'} Mode. Pausing autominer...`);
-                notifyUser('Pond0x Error', `Failed to start mining: No Mine button found after multiple attempts. Pausing autominer.`);
-                isPaused = true;
-                await GM.setValue('pond0xMinerIsPaused', true);
-                await GM.setValue('pond0xResumeAfterWait', false);
-                await GM.setValue('pond0xMineButtonReloadAttempts', 0);
-                const pauseResumeBtn = document.getElementById('pauseResumeBtn');
-                if (pauseResumeBtn) {
-                    pauseResumeBtn.textContent = 'Resume';
-                    pauseResumeBtn.style.background = '#28a745';
-                    pauseResumeBtn.style.color = 'white';
-                }
-                statusLock = false;
-                return;
-            }
+        if (!mineBtn && mineButtonRetries >= maxMineButtonRetries && isAutoMode) {
+            console.warn(`${lh} - Mine button not found after ${maxMineButtonRetries} retries in Auto Mode. Reloading page...`);
+            notifyUser('Pond0x Warning', `Mine button not found after ${maxMineButtonRetries} retries. Reloading page...`);
+            pageReloads++;
+            reloadReason = 'Mine Button Not Found (Auto Mode)';
+            await GM.setValue('pond0xPageReloads', pageReloads);
+            await GM.setValue('pond0xReloadReason', reloadReason);
+            window.location.href = 'https://www.pond0x.com/mining';
+            statusLock = false;
+            return;
         }
-        await GM.setValue('pond0xMineButtonReloadAttempts', 0);
+
+        if (!mineBtn && !isAutoMode) {
+            console.warn(`${lh} - No Mine button found in Manual Mode. Reloading page...`);
+            notifyUser('Pond0x Warning', 'No Mine button found in Manual Mode. Reloading page...');
+            pageReloads++;
+            reloadReason = 'Mine Button Not Found (Manual Mode)';
+            await GM.setValue('pond0xPageReloads', pageReloads);
+            await GM.setValue('pond0xReloadReason', reloadReason);
+            window.location.href = 'https://www.pond0x.com/mining';
+            statusLock = false;
+            return;
+        }
 
         if (mineBtn) {
             console.log(`${lh} - Starting mining session...`);
@@ -567,8 +538,6 @@ const startMining = async () => {
                         await GM.setValue('pond0xAutominerStarted', true);
                     }
                     window.pond0xO.startTime = getTime();
-                    isMiningRunning = true;
-                    await GM.setValue('pond0xIsMiningRunning', true);
                 } else if (invalidUnclaimedValues.includes(unclaimed)) {
                     if (isErrorStateRestartEnabled) {
                         console.warn(`${lh} - Mining start failed: Invalid unclaimed value ${unclaimed} detected after 2 minutes, reloading page (Error State Restarts enabled)`);
@@ -623,17 +592,16 @@ const startMining = async () => {
         }
         statusLock = false;
     };
-
-    const run = async () => {
-        if (isPaused) {
-            console.log(`${lh} - Autominer paused. Waiting to resume...`);
-            nextRetryTime = null;
+const run = async () => {
+        if (!isAutoMode && !isMiningRunning && !autominerManuallyStarted) {
+            console.log(`${lh} - Manual mode inactive, awaiting user start. Skipping run cycle...`);
             runTimeout = setTimeout(run, getTimeMS(window.pond0xO.runInterval));
             return;
         }
 
-        if (!isAutoMode && !autominerManuallyStarted) {
-            console.log(`${lh} - Manual mode inactive, awaiting user start. Skipping run cycle...`);
+        if (isPaused) {
+            console.log(`${lh} - Autominer paused. Waiting to resume...`);
+            nextRetryTime = null;
             runTimeout = setTimeout(run, getTimeMS(window.pond0xO.runInterval));
             return;
         }
@@ -751,6 +719,8 @@ const startMining = async () => {
                     return;
                 }
             }
+        } else if (!isAutoMode && !hashrate && !isMiningRunning) {
+            await startMining();
         }
 
         let currentUnclaimedNum = 0;
@@ -815,10 +785,6 @@ const startMining = async () => {
                     }
                     const waitUntil = getTime() + (claimWaitPeriodMinutes * 60);
                     await GM.setValue('pond0xWaitUntil', waitUntil);
-                    if (!isAutoMode) {
-                        await GM.setValue('pond0xResumeAfterWait', true);
-                        console.log(`${lh} - Manual mode: Set resumeAfterWait before wait period`);
-                    }
                     await new Promise(resolve => setTimeout(resolve, getTimeMS(claimWaitPeriodMinutes * 60)));
                     isPaused = false;
                     await GM.setValue('pond0xMinerIsPaused', false);
@@ -828,20 +794,9 @@ const startMining = async () => {
                         pauseResumeBtn.style.background = '#ffc107';
                         pauseResumeBtn.style.color = 'black';
                     }
-                    if (!isAutoMode) {
-                        console.log(`${lh} - Manual mode: Claim + Wait period completed, preparing to resume mining...`);
-                        autominerManuallyStarted = true;
-                        await GM.setValue('pond0xAutominerStarted', true);
-                        const toggleMiningBtn = document.getElementById('toggleMiningBtn');
-                        if (toggleMiningBtn) {
-                            toggleMiningBtn.textContent = 'Stop Manual Mining';
-                            toggleMiningBtn.style.background = '#dc3545';
-                        }
-                        await startMining();
-                    }
                 }
 
-                if (!isAutoMode && !isClaimWaitMode) {
+                if (!isAutoMode) {
                     console.log(`${lh} - Manual mode: Claim completed, stopping autominer and preparing for user interaction...`);
                     if (runTimeout) {
                         clearTimeout(runTimeout);
@@ -849,16 +804,14 @@ const startMining = async () => {
                     }
                     autominerManuallyStarted = false;
                     await GM.setValue('pond0xAutominerStarted', false);
-                    await GM.setValue('pond0xResumeAfterWait', false);
                     const toggleMiningBtn = document.getElementById('toggleMiningBtn');
                     if (toggleMiningBtn) {
                         toggleMiningBtn.textContent = 'Start Manual Mining';
                         toggleMiningBtn.style.background = '#28a745';
                     }
-                    notifyUser('Pond0x Claim', `Claim successful in manual mode: ${formatClaimValue(currentUnclaimedNum)} tokens. Awaiting user action...`);
-                    return;
-                } else if (!isAutoMode) {
-                    notifyUser('Pond0x Claim', `Claim successful in manual mode: ${formatClaimValue(currentUnclaimedNum)} tokens. Resuming mining after ${claimWaitPeriodMinutes}-minute wait...`);
+                    notifyUser('Pond0x Claim', `Claim successful in manual mode: ${formatClaimValue(currentUnclaimedNum)} tokens${isClaimWaitMode ? ` after ${claimWaitPeriodMinutes}-minute wait` : '. Awaiting user action...'}`);
+                } else if (!isClaimWaitMode) {
+                    notifyUser('Pond0x Claim', `Claim successful due to hash rate 0: ${formatClaimValue(currentUnclaimedNum)} tokens`);
                 }
 
                 lastStatusCheckTime = 0;
@@ -960,10 +913,6 @@ const startMining = async () => {
                         }
                         const waitUntil = getTime() + (claimWaitPeriodMinutes * 60);
                         await GM.setValue('pond0xWaitUntil', waitUntil);
-                        if (!isAutoMode) {
-                            await GM.setValue('pond0xResumeAfterWait', true);
-                            console.log(`${lh} - Manual mode: Set resumeAfterWait before wait period`);
-                        }
                         await new Promise(resolve => setTimeout(resolve, getTimeMS(claimWaitPeriodMinutes * 60)));
                         isPaused = false;
                         await GM.setValue('pond0xMinerIsPaused', false);
@@ -973,20 +922,9 @@ const startMining = async () => {
                             pauseResumeBtn.style.background = '#ffc107';
                             pauseResumeBtn.style.color = 'black';
                         }
-                        if (!isAutoMode) {
-                            console.log(`${lh} - Manual mode: Claim + Wait period completed, preparing to resume mining...`);
-                            autominerManuallyStarted = true;
-                            await GM.setValue('pond0xAutominerStarted', true);
-                            const toggleMiningBtn = document.getElementById('toggleMiningBtn');
-                            if (toggleMiningBtn) {
-                                toggleMiningBtn.textContent = 'Stop Manual Mining';
-                                toggleMiningBtn.style.background = '#dc3545';
-                            }
-                            await startMining();
-                        }
                     }
 
-                    if (!isAutoMode && !isClaimWaitMode) {
+                    if (!isAutoMode) {
                         console.log(`${lh} - Manual mode: Claim completed, stopping autominer and preparing for user interaction...`);
                         if (runTimeout) {
                             clearTimeout(runTimeout);
@@ -994,16 +932,14 @@ const startMining = async () => {
                         }
                         autominerManuallyStarted = false;
                         await GM.setValue('pond0xAutominerStarted', false);
-                        await GM.setValue('pond0xResumeAfterWait', false);
                         const toggleMiningBtn = document.getElementById('toggleMiningBtn');
                         if (toggleMiningBtn) {
                             toggleMiningBtn.textContent = 'Start Manual Mining';
                             toggleMiningBtn.style.background = '#28a745';
                         }
-                        notifyUser('Pond0x Claim', `Claim successful in manual mode: ${formatClaimValue(currentUnclaimedNum)} tokens. Awaiting user action...`);
-                        return;
-                    } else if (!isAutoMode) {
-                        notifyUser('Pond0x Claim', `Claim successful in manual mode: ${formatClaimValue(currentUnclaimedNum)} tokens. Resuming mining after ${claimWaitPeriodMinutes}-minute wait...`);
+                        notifyUser('Pond0x Claim', `Claim successful in manual mode: ${formatClaimValue(currentUnclaimedNum)} tokens${isClaimWaitMode ? ` after ${claimWaitPeriodMinutes}-minute wait` : '. Awaiting user action...'}`);
+                    } else if (!isClaimWaitMode) {
+                        notifyUser('Pond0x Claim', `Claim successful: ${formatClaimValue(currentUnclaimedNum)} tokens`);
                     }
 
                     lastStatusCheckTime = 0;
@@ -1313,14 +1249,6 @@ const resetDailyStats = async () => {
                     notifyUser('Pond0x Mining', `Mining stopped ${isAutoMode ? 'automatically' : 'manually'}`);
                     toggleMiningBtn.textContent = isAutoMode ? 'Start Auto Mining' : 'Start Manual Mining';
                     toggleMiningBtn.style.background = '#28a745';
-                    if (!isAutoMode) {
-                        if (runTimeout) {
-                            clearTimeout(runTimeout);
-                            runTimeout = null;
-                        }
-                        autominerManuallyStarted = false;
-                        await GM.setValue('pond0xAutominerStarted', false);
-                    }
                 } else if (!isPaused) {
                     if (isAutoMode) {
                         autominerManuallyStarted = true;
@@ -1349,9 +1277,6 @@ const resetDailyStats = async () => {
                         autominerManuallyStarted = true;
                         await GM.setValue('pond0xAutominerStarted', true);
                         await startMining();
-                        if (isMiningRunning) {
-                            runTimeout = setTimeout(run, getTimeMS(window.pond0xO.runInterval));
-                        }
                     }
                     if (isMiningRunning) {
                         toggleMiningBtn.textContent = isAutoMode ? 'Stop Auto Mining' : 'Stop Manual Mining';
@@ -1383,8 +1308,8 @@ const resetDailyStats = async () => {
                     runTimeout = null;
                     nextRetryTime = null;
                     console.log(`${lh} - Cleared scheduled status check due to pause`);
-                } else if (!isPaused && !runTimeout && autominerManuallyStarted) {
-                    runTimeout = setTimeout(run, getTimeMS(window.pond0xO.runInterval));
+                } else if (!isPaused && !runTimeout) {
+                    await run();
                 }
             });
 
@@ -1528,12 +1453,6 @@ const resetDailyStats = async () => {
                     autoToggle.checked = isAutoMode;
                     toggleMiningBtn.textContent = isMiningRunning ? (isAutoMode ? 'Stop Auto Mining' : 'Stop Manual Mining') : (isAutoMode ? 'Start Auto Mining' : 'Start Manual Mining');
                     toggleMiningBtn.style.background = isMiningRunning ? '#dc3545' : '#28a745';
-                    if (!isAutoMode && isMiningRunning) {
-                        runTimeout = setTimeout(run, getTimeMS(window.pond0xO.runInterval));
-                    } else if (isAutoMode && runTimeout) {
-                        clearTimeout(runTimeout);
-                        runTimeout = null;
-                    }
                 });
             }
 
@@ -1609,7 +1528,8 @@ const resetDailyStats = async () => {
         link.click();
         document.body.removeChild(link);
     };
-const createSummaryBoxNow = (container) => {
+
+    const createSummaryBoxNow = (container) => {
         try {
             const summaryBox = document.createElement('div');
             summaryBox.id = 'pond0xClaimSummary';
@@ -1697,7 +1617,7 @@ const createSummaryBoxNow = (container) => {
 
             summaryBox.innerHTML = `
                 <div style="font-weight: bold; background: rgba(0, 0, 0, 0.5); padding: 5px; border-radius: 5px; margin-bottom: 10px; text-align: center;">
-                    Ez Miner 🪷 ⛏️
+                    Ez Mode - v4.2.0 🐻 ⛏️💧
                 </div>
                 <div style="margin-bottom: 10px;">
                     <strong>Date:</strong> ${dateString}<br>
@@ -1783,7 +1703,7 @@ const createSummaryBoxNow = (container) => {
 
             box.innerHTML = `
                 <div style="font-weight: bold; background: rgba(0, 0, 0, 0.5); padding: 5px; border-radius: 5px; margin-bottom: 10px; text-align: center;">
-                    Ez Miner 🪷 ⛏️ 
+                    Ez Mode - v4.2.0 🐻 ⛏️💧
                 </div>
                 <div style="margin-bottom: 10px;">
                     <strong>Date:</strong> ${dateString}<br>
@@ -1832,9 +1752,7 @@ const createSummaryBoxNow = (container) => {
     await performDailyReset();
     await createClaimSummaryBox();
     await createControlPanel();
-    if (autominerManuallyStarted) {
-        runTimeout = setTimeout(run, getTimeMS(window.pond0xO.runInterval));
-    }
+    await run();
 
     // Add event listener for page reloads
     window.addEventListener('beforeunload', async () => {
