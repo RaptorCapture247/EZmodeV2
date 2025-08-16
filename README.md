@@ -58,20 +58,20 @@
 1. **Load the Extension in Chrome**:
 - Open Chrome and go to `chrome://extensions/`.
 - Enable “Developer mode” (toggle in the top-right corner).
-- Click “Load unpacked” and select the `ez-mode` folder you cloned.
+- Click “Load unpacked” and select the `EzmodeV2-Mining-Status-Bypass` folder you cloned.
 
 -Alternativley you can clone the repository
 
 **Clone the Repository**:
-    git clone https://github.com/[your-username]/ez-mode.git
+    git clone https://github.com/[your-username]/EzmodeV2/mining-status-bypass.git
    cd ez-mode
 
 - Open Chrome and go to `chrome://extensions/`.
 - Enable “Developer mode” (toggle in the top-right corner).
-- Click “Load unpacked” and select the `EZmodeV2-main` folder you cloned.
+- Click “Load unpacked” and select the `EZmodeV2-mining-status-bypass` folder you cloned.
 
 2. **Verify Installation**:
-- You should see the “EzmodeV2” extension listed with the swapping lotus icon (as shown in the manifest: `icon48.png` and `icon128.png`).
+- You should see the “EzmodeV2 Mining Status Bypass” extension listed with the swapping lotus icon (as shown in the manifest: `icon48.png` and `icon128.png`).
 - The extension will automatically activate when you visit `https://www.pond0x.com/mining` or `https://www.pond0x.com/swap/solana`.
 
 -----
