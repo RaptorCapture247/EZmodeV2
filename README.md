@@ -1,6 +1,9 @@
-# EzmodeV2 (Mining Status Bypass)  - Pond0x Automation Extension
+<h1 align="center"># EzmodeV2 - Pond0x Automation Extension</h1>
 
-🪷 🤝 ⛏️ 💎
+<div align="center">
+  <img src="icon128.png" alt="Logo">
+<h2>🪷 🤝 ⛏️ 💎</h2>
+</div>
 
 **EzmodeV2 (Mining Status Bypass)** is a browser extension designed to automate some participation activities on [Pond0x](https://www.pond0x.com/). With version 4.2.0.694, this extension provides a seamless experience for users looking to optimize their mining and swapping operations with minimal manual intervention. Featuring a user-friendly control panel, detailed status tracking, and smart automation features, EzmodeV2 is your go-to tool for efficient Pond0x interactions.
 
