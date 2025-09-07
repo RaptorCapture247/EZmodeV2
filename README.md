@@ -5,7 +5,7 @@
 <h2>🪷 🤝 ⛏️ 💎</h2>
 </div>
 
-**EzmodeV2 (Mining Status Bypass)** is a browser extension designed to automate some participation activities on [Pond0x](https://www.pond0x.com/). With version 4.2.0.694, this extension provides a seamless experience for users looking to optimize their mining and swapping operations with minimal manual intervention. Featuring a user-friendly control panel, detailed status tracking, and smart automation features, EzmodeV2 is your go-to tool for efficient Pond0x interactions.
+**EzmodeV2 (Mining Status Bypass)** is a browser extension designed to automate some participation activities on [Pond0x](https://www.pond0x.com/). With version 4.2.0.695, this extension provides a seamless experience for users looking to optimize their mining and swapping operations with minimal manual intervention. Featuring a user-friendly control panel, detailed status tracking, and smart automation features, EzmodeV2 is your go-to tool for efficient Pond0x interactions.
 
 -  **Wallet integration**: Note the extension does not connect to or interact with your wallet in any way. It does not create any non native Pond0x signatures or need your private key or seed phrase to function.
 -  **Full Automation**: Note as the extension does not interact with your wallet. You will require an autoclicker or pyautogui sciprt in order to confirm the Pond0x wallet signatures. 
