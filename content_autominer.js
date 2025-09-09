@@ -685,13 +685,31 @@ const performDailyReset = async () => {
                         }
                         window.pond0xO.startTime = getTime();
                     }
-                } else {
-                    console.warn(`${lh} - Mining start failed: Hashrate=${hashrate}, Unclaimed=${unclaimed} (timeout after 2 minutes)`);
-                    notifyUser('Pond0x Warning', `Mining start failed: Hashrate=${hashrate}, Unclaimed=${unclaimed} (timeout)`);
-                    isMiningRunning = false;
-                    await GM.setValue('pond0xIsMiningRunning', false);
-                    window.pond0xO.startTime = null;
-                }
+                } else if (unclaimed && !invalidUnclaimedValues.includes(unclaimed) && hashrate === 0) {
+    console.log(`${lh} - Mining session started successfully with ${unclaimed} tokens. Hashrate initializing, monitoring for full activation...`);
+    notifyUser('Pond0x Mining', `Mining started with ${unclaimed} tokens but zero hashrate. Monitoring for recovery...`);
+    
+    isMiningRunning = true;
+    await GM.setValue('pond0xIsMiningRunning', true);
+    
+    if (!summaryBoxCreated) {
+        createSummaryBoxNow(lcdContainer);
+        summaryBoxCreated = true;
+    } else {
+        await updateClaimSummaryBox();
+    }
+    if (!autominerManuallyStarted) {
+        autominerManuallyStarted = true;
+        await GM.setValue('pond0xAutominerStarted', true);
+    }
+    window.pond0xO.startTime = getTime();
+} else {
+    console.warn(`${lh} - Mining start failed: Hashrate=${hashrate}, Unclaimed=${unclaimed} (timeout after 2 minutes)`);
+    notifyUser('Pond0x Warning', `Mining start failed: Hashrate=${hashrate}, Unclaimed=${unclaimed} (timeout)`);
+    isMiningRunning = false;
+    await GM.setValue('pond0xIsMiningRunning', false);
+    window.pond0xO.startTime = null;
+}
             } else {
                 console.warn(`${lh} - LCD container not found after ${maxAttempts} attempts, falling back to observer...`);
                 notifyUser('Pond0x Warning', 'LCD container not found after mine click');
