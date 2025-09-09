@@ -19,7 +19,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.log(`${lbh} - Received notification request: ${message.title} - ${message.body}`);
         chrome.notifications.create('', {
             type: 'basic',
-            iconUrl: 'icon.png',
+            iconUrl: 'icon48.png',
             title: message.title,
             message: message.body,
             priority: 1
