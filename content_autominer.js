@@ -3,10 +3,17 @@
 
     const lh = '[Pond0x-Miner]';
 
-    const GM = {
+const GM = {
     setValue: (key, value) => {
         return new Promise((resolve) => {
             try {
+                // Check if extension context is still valid
+                if (!chrome.runtime || !chrome.runtime.id) {
+                    console.warn(`${lh} - Extension context invalid for ${key}, skipping save`);
+                    resolve(false);
+                    return;
+                }
+                
                 chrome.storage.local.set({ [key]: value }, () => {
                     if (chrome.runtime.lastError) {
                         console.error(`${lh} - Error in GM.setValue for ${key}:`, chrome.runtime.lastError.message);
@@ -16,7 +23,7 @@
                     resolve(true);
                 });
             } catch (error) {
-                console.error(`${lh} - Context invalidated or other error in GM.setValue for ${key}:`, error.message);
+                console.warn(`${lh} - Context invalidated or other error in GM.setValue for ${key}:`, error.message);
                 resolve(false);
             }
         });
@@ -24,6 +31,13 @@
     getValue: (key, defaultValue) => {
         return new Promise((resolve) => {
             try {
+                // Check if extension context is still valid
+                if (!chrome.runtime || !chrome.runtime.id) {
+                    console.warn(`${lh} - Extension context invalid for ${key}, returning default`);
+                    resolve(defaultValue);
+                    return;
+                }
+                
                 chrome.storage.local.get([key], (result) => {
                     if (chrome.runtime.lastError) {
                         console.error(`${lh} - Error in GM.getValue for ${key}:`, chrome.runtime.lastError.message);
@@ -33,7 +47,7 @@
                     resolve(result[key] !== undefined ? result[key] : defaultValue);
                 });
             } catch (error) {
-                console.error(`${lh} - Context invalidated or other error in GM.getValue for ${key}:`, error.message);
+                console.warn(`${lh} - Context invalidated or other error in GM.getValue for ${key}:`, error.message);
                 resolve(defaultValue);
             }
         });
@@ -2105,6 +2119,10 @@ const resetDailyStats = async () => {
 
     // Add event listener for page reloads
     window.addEventListener('beforeunload', async () => {
-        await GM.setValue('pond0xReloadReason', reloadReason || 'User Navigation');
+        try {
+    await GM.setValue('pond0xReloadReason', reloadReason || 'User Navigation');
+} catch (error) {
+    console.warn(`${lh} - Failed to save reload reason, continuing anyway:`, error.message);
+}
     });
 })();
