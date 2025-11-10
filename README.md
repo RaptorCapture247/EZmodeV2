@@ -1,4 +1,4 @@
-<h1 align="center"># EzmodeV2 - Pond0x Automation Extension</h1>
+<h1 align="center"> EzmodeV2 - Pond0x Automation Extension</h1>
 
 <div align="center">
   <img src="icon128.png" alt="Logo">
