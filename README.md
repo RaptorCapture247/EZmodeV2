@@ -46,7 +46,7 @@
 ## Installation
 
 ### Prerequisites
-- **Google Chromium Browser**: EzModeV2 is a Chrome extension and requires Google Chrome,Brave,Firefox,Edge to function.
+- **Google Chromium Browser**: EzModeV2 is a Chrome extension and requires Google Chrome, Brave, Firefox, Edge to function.
 - **Pond0x Account**: You need an active Pond0x account and a connected wallet (e.g., Phantom) to interact with the mining and swapping features.
 -  **Wallet interation**: Note the extension does not connect to or interact with your wallet in any way. It does not create any non native Pond0x signatures or need your private key or seed phrase to function. 
 
