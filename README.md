@@ -5,6 +5,8 @@
 <h2>🪷 🤝 ⛏️ 💎</h2>
 </div>
 
+# The main branch of this repository is no longer being updated. Please use (https://github.com/RaptorCapture247/EZmodeV2/tree/Mining-Status-Bypass) for most current version. Thank you.
+
 **EzmodeV2** is a browser extension designed to automate some participation activities on [Pond0x](https://www.pond0x.com/). With version 4.2.0.695, this extension provides a seamless experience for users looking to optimize their mining and swapping operations with minimal manual intervention. Featuring a user-friendly control panel, detailed status tracking, and smart automation features, EzmodeV2 is your go-to tool for efficient Pond0x interactions.
 
 -  **Wallet integration**: Note the extension does not connect to or interact with your wallet in any way. It does not create any non native Pond0x signatures or need your private key or seed phrase to function.
