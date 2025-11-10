@@ -46,7 +46,7 @@
 ## Installation
 
 ### Prerequisites
-- **Google Chromium Browser**: Ez Mode is a Chrome extension and requires Google Chrome,Brave,Firefox,Edge to function.
+- **Google Chromium Browser**: EzModeV2 is a Chrome extension and requires Google Chrome,Brave,Firefox,Edge to function.
 - **Pond0x Account**: You need an active Pond0x account and a connected wallet (e.g., Phantom) to interact with the mining and swapping features.
 -  **Wallet interation**: Note the extension does not connect to or interact with your wallet in any way. It does not create any non native Pond0x signatures or need your private key or seed phrase to function. 
 
@@ -71,7 +71,7 @@
 - Click “Load unpacked” and select the `EZmodeV2-mining-status-bypass` folder you cloned.
 
 2. **Verify Installation**:
-- You should see the “EzmodeV2 Mining Status Bypass” extension listed with the swapping lotus icon (as shown in the manifest: `icon48.png` and `icon128.png`).
+- You should see the “EzmodeV2” extension listed with the swapping lotus icon (as shown in the manifest: `icon48.png` and `icon128.png`).
 - The extension will automatically activate when you visit `https://www.pond0x.com/mining` or `https://www.pond0x.com/swap/solana`.
 
 -----
@@ -162,7 +162,7 @@ ez-mode/
 - Edit the JavaScript files (`background.js`, `content_autominer.js`, `content_autoswapper.js`) as needed.
 - Update the `manifest.json` if you add new permissions or content scripts.
 2. **Reload Extension**:
-- Go to `chrome://extensions/`, find “EzmodeV2 (Mining Status Bypass),” and click “Reload.”
+- Go to `chrome://extensions/`, find “EzmodeV2” and click “Reload.”
 3. **Test**:
 - Visit `https://www.pond0x.com/mining` and `https://www.pond0x.com/swap/solana` to test the automation features.
 - Check the console logs (`Ctrl+Shift+J`) for debugging.
