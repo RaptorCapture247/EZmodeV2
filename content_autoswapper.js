@@ -1556,6 +1556,8 @@
         }
     };
 
+    
+
     let swapAmount = await GM.getValue('pond0xSwapAmount', 0.01);
     let originalSwapAmount = await GM.getValue('pond0xOriginalSwapAmount', 0.01);
     let userSetAmount = await GM.getValue('pond0xUserSetAmount', 0.01); // New variable for user-set amount
@@ -1586,6 +1588,173 @@
         PEPE: { name: 'Pepe', address: 'B5WTLaRwaUQpKk7ir1wniNB6m5o8GgMrimhKMYan2R6B', descriptionSelector: 'p.text-xs.text-left.text-gray-500.dark\\:text-white-35.truncate', descriptionText: 'Pepe' },
         WBTC: { name: 'WBTC', address: '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh', descriptionSelector: 'p.text-xs.text-left.text-gray-500.dark\\:text-white-35.truncate', descriptionText: 'Wrapped BTC (Portal)' }
     };
+
+// ===== SHADOW DOM HELPER FUNCTIONS =====
+// These functions help access elements inside the Jupiter plugin's shadow DOM
+
+function getJupiterShadowRoot() {
+    try {
+        const jupiterInstance = document.querySelector('#jupiter-plugin-instance > div');
+        if (!jupiterInstance) {
+            console.warn(`${lh} - Jupiter plugin instance not found in DOM`);
+            return null;
+        }
+        const shadowRoot = jupiterInstance.shadowRoot;
+        if (!shadowRoot) {
+            console.warn(`${lh} - Jupiter plugin shadowRoot not found`);
+            return null;
+        }
+        return shadowRoot;
+    } catch (error) {
+        console.error(`${lh} - Error accessing Jupiter shadowRoot:`, error);
+        return null;
+    }
+}
+
+function queryShadowDOM(selector) {
+    const shadowRoot = getJupiterShadowRoot();
+    if (!shadowRoot) return null;
+    return shadowRoot.querySelector(selector);
+}
+
+function queryShadowDOMAll(selector) {
+    const shadowRoot = getJupiterShadowRoot();
+    if (!shadowRoot) return [];
+    return shadowRoot.querySelectorAll(selector);
+}
+
+// Helper function to get the swap button from shadow DOM
+function getSwapButton(requireEnabled = false) {
+    const shadowRoot = getJupiterShadowRoot();
+    if (!shadowRoot) {
+        console.warn(`${lh} - Cannot get swap button: shadowRoot not found`);
+        return null;
+    }
+
+    // Try multiple strategies to find the swap button
+    let button = null;
+
+    // Strategy 1: Find button by text content containing "swap" or "retry"
+    const allButtons = shadowRoot.querySelectorAll('button');
+    for (const btn of allButtons) {
+        const text = btn.textContent?.toLowerCase() || '';
+        if ((text.includes('swap') || text.includes('retry') || text.includes('swap more')) && btn.offsetWidth > 0 && btn.offsetHeight > 0) {
+            button = btn;
+            const isDisabled = btn.disabled || 
+                             btn.className.includes('cursor-not-allowed') || 
+                             btn.className.includes('pointer-events-none');
+            
+            console.log(`${lh} - Found swap button: "${btn.textContent}" disabled:${isDisabled} (${btn.className})`);
+            
+            // If we require enabled and it's disabled, don't return it
+            if (requireEnabled && isDisabled) {
+                console.log(`${lh} - Button is disabled, requireEnabled=true, returning null`);
+                return null;
+            }
+            break;
+        }
+    }
+
+    // Strategy 2: Try specific path (fallback)
+    if (!button) {
+        button = shadowRoot.querySelector('#jupiter-plugin > div > form > div > div:nth-child(2) > button');
+        if (button) {
+            console.log(`${lh} - Found swap button by path (class: ${button.className})`);
+        }
+    }
+
+    if (!button) {
+        console.error(`${lh} - ❌ Could not find swap button. Available buttons:`, 
+            Array.from(allButtons).map(b => `"${b.textContent}" (${b.className})`));
+    }
+
+    return button;
+}
+
+// Helper function to get token dropdowns from shadow DOM
+function getTokenDropdowns() {
+    const shadowRoot = getJupiterShadowRoot();
+    if (!shadowRoot) return [];
+    
+    // Try specific path first
+    let dropdowns = shadowRoot.querySelectorAll('button.py-2\\.5.px-2.rounded-full.flex.items-center.bg-interactive');
+    
+    // Filter to only visible buttons
+    dropdowns = Array.from(dropdowns).filter(btn => btn.offsetWidth > 0 && btn.offsetHeight > 0);
+    
+    console.log(`${lh} - Found ${dropdowns.length} dropdown buttons in shadow DOM`);
+    return dropdowns;
+}
+
+// Helper function to get search input from shadow DOM
+function getSearchInput() {
+    const shadowRoot = getJupiterShadowRoot();
+    if (!shadowRoot) return null;
+
+    // Get all inputs and pick the one that is visible and has placeholder Search
+    const inputs = [...shadowRoot.querySelectorAll("input")];
+    const search = inputs.find(i =>
+        i.placeholder === "Search" &&
+        i.offsetWidth > 0 &&
+        i.offsetHeight > 0
+    );
+
+    if (search) console.log(`${lh} - Real search input found`, search);
+    return search || null;
+}
+
+// Clicks, focuses, and inserts text directly into Jupiter search input
+async function typeIntoSearch(input, text) {
+    const root = document.querySelector("#jupiter-plugin-instance > div").shadowRoot;
+    const realInput = root.activeElement && root.activeElement.placeholder === "Search"
+        ? root.activeElement
+        : input;
+
+    if (!realInput) {
+        console.error(`${lh} - No search input found.`);
+        return;
+    }
+
+    // ===== CLICK & FOCUS =====
+    console.log(`${lh} - Clicking and focusing Jupiter search input...`);
+    const rect = realInput.getBoundingClientRect();
+    const mouseOpts = {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2
+    };
+    realInput.dispatchEvent(new MouseEvent("mouseover", mouseOpts));
+    realInput.dispatchEvent(new MouseEvent("mousedown", mouseOpts));
+    realInput.dispatchEvent(new MouseEvent("mouseup", mouseOpts));
+    realInput.dispatchEvent(new MouseEvent("click", mouseOpts));
+
+    realInput.focus();
+    await new Promise(r => setTimeout(r, 500)); // Let Svelte bind listeners
+
+    // ===== CLEAR & INSERT TEXT DIRECTLY =====
+    console.log(`${lh} - Injecting token address text via InputEvent...`);
+    realInput.value = "";
+    realInput.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true }));
+
+    // Directly set the full text value
+    realInput.setRangeText(text);
+    realInput.dispatchEvent(
+        new InputEvent("input", {
+            bubbles: true,
+            cancelable: true,
+            inputType: "insertText",
+            data: text
+        })
+    );
+
+    // ===== CONFIRM SELECTION =====
+    realInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    realInput.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true }));
+
+    console.log(`${lh} - Finished typing "${text}" into Jupiter search input`);
+}
 
     const customTokens = await GM.getValue('pond0xCustomTokens', {});
     Object.assign(TOKEN_CONFIG, customTokens);
@@ -2671,7 +2840,7 @@ async function startSwapping() {
     const swapButtonCheck = new Promise((resolve) => {
         const startTime = Date.now();
         const checkInterval = setInterval(() => {
-            swapButton = document.querySelector('.text-xl.btntxt') || document.querySelector('[class*="btntxt"]');
+            swapButton = getSwapButton(false);
             const isVisible = swapButton && swapButton.offsetWidth > 0 && swapButton.offsetHeight > 0;
             if (swapButton && isVisible) {
                 clearInterval(checkInterval);
@@ -2718,6 +2887,56 @@ async function startSwapping() {
     }
 }
 
+async function getYouReceiveAmount() {
+  const host = document.querySelector("#jupiter-plugin-instance > div");
+  const root = host?.shadowRoot;
+  if (!root) {
+    console.warn(`${lh} - getYouReceiveAmount: No shadow root found.`);
+    return null;
+  }
+
+  const inputSelector =
+    "#jupiter-plugin > div > form > div > div.w-full.mt-2.rounded-xl.flex.flex-col.px-2 > div > div:nth-child(3) > div:nth-child(2) > div.flex.flex-col.items-end.justify-between.w-full > input";
+
+  let lastVal = null;
+  let stableCount = 0;
+  const maxWait = 5000; // shorter: wait up to 5s
+  const interval = 400;
+  const start = Date.now();
+
+  while (Date.now() - start < maxWait) {
+    const input = root.querySelector(inputSelector);
+    if (input) {
+      const raw = (input.value || "").trim().replace(/,/g, "");
+      const val = parseFloat(raw);
+      if (!isNaN(val) && val > 0) {
+        if (val === lastVal) {
+          stableCount++;
+          if (stableCount >= 2) {
+            console.log(`${lh} - 💰 Stable 'You Receive' value confirmed: ${val}`);
+            await GM.setValue("pond0xLastStableReceive", val);
+            return val;
+          }
+        } else {
+          stableCount = 0;
+        }
+        lastVal = val;
+      }
+    }
+    await new Promise(r => setTimeout(r, interval));
+  }
+
+  const stored = await GM.getValue("pond0xLastStableReceive", null);
+  if (stored) {
+    console.warn(`${lh} - ⚠️ Using previously stored stable 'You Receive' value: ${stored}`);
+    return stored;
+  }
+
+  console.error(`${lh} - ❌ Failed to detect stable 'You Receive' amount.`);
+  return null;
+}
+
+
 async function performSwap() {
     if (!isSwapping) {
         console.log(`${lh} - performSwap: Swapping stopped by user.`);
@@ -2728,12 +2947,30 @@ async function performSwap() {
         return;
     }
 
+    // Wait for shadow DOM to be ready
+    console.log(`${lh} - Waiting for shadow DOM and swap button...`);
+    let waitAttempts = 0;
+    while (waitAttempts < 10) {
+        const shadowRoot = getJupiterShadowRoot();
+        if (shadowRoot) {
+            const allButtons = shadowRoot.querySelectorAll('button');
+            if (allButtons.length > 0) {
+                console.log(`${lh} - 🔍 Shadow DOM ready with ${allButtons.length} buttons:`, 
+                    Array.from(allButtons).map(b => `"${b.textContent.trim()}" visible:${b.offsetWidth > 0}`));
+                break;
+            }
+        }
+        console.log(`${lh} - Shadow DOM not ready, waiting... (attempt ${waitAttempts + 1}/10)`);
+        await new Promise(r => setTimeout(r, 500));
+        waitAttempts++;
+    }
+
     console.log(`${lh} - Attempting swap #${swapCounter + 1} at ${new Date().toISOString()} (Sell: ${selectedSellToken}, Buy: ${selectedBuyToken})`);
     console.log(`${lh} - Current mode: isReferralMode=${isReferralMode}, isRewardSwapsMode=${isRewardSwapsMode}`);
     updateLog(`Swap #${swapCounter + 1}`);
 
-    swapButton = document.querySelector('.text-xl.btntxt') || document.querySelector('[class*="btntxt"]');
-    if (!swapButton || !document.body.contains(swapButton)) {
+    swapButton = getSwapButton(false); // Just check it exists, don't require enabled yet
+    if (!swapButton) {
         console.error(`${lh} - Swap button not found at start of performSwap. Stopping.`);
         notifyUser('Pond0x Warning', 'Swap button not found. Stopping.');
         updateLog('Button lost');
@@ -2752,31 +2989,42 @@ async function performSwap() {
     }
 
     const getBuyTokenQuote = async () => {
-        let attempts = 0;
-        const maxAttempts = 5;
-        const delay = 1000;
+    const selector =
+        'input.h-full.w-full.bg-transparent.text-white.text-left.text-2xl.sm\\:text-4xl.placeholder\\:text-2xl.sm\\:placeholder\\:text-4xl.placeholder\\:font-normal';
+    const maxAttempts = 1;
+    const delay = 1000;
 
-        while (attempts < maxAttempts) {
-            const buyQuoteInput = document.querySelector('input.h-full.w-full.bg-transparent.text-white.text-left.text-2xl.sm\\:text-4xl.placeholder\\:text-2xl.sm\\:placeholder\\:text-4xl.placeholder\\:font-normal');
-            if (buyQuoteInput) {
-                console.log(`${lh} - Found buy token quote input element:`, buyQuoteInput.outerHTML);
-                const quoteText = buyQuoteInput.value.replace(/,/g, '');
-                const quoteValue = parseFloat(quoteText);
-                if (!isNaN(quoteValue) && quoteValue > 0) {
-                    console.log(`${lh} - Successfully scraped buy token quote: ${quoteValue} ${selectedBuyToken} after ${attempts + 1} attempts`);
-                    return quoteValue;
-                }
-                console.warn(`${lh} - Invalid buy token quote value: ${buyQuoteInput.value} on attempt ${attempts + 1}/${maxAttempts}. Retrying after ${delay}ms...`);
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const buyQuoteInput = document.querySelector(selector);
+
+        if (buyQuoteInput) {
+            const quoteText = buyQuoteInput.value?.trim().replace(/,/g, '') || '';
+            const quoteValue = parseFloat(quoteText);
+
+            if (!isNaN(quoteValue) && quoteValue > 0) {
+                console.log(
+                    `${lh} - ✅ Scraped buy token quote: ${quoteValue} ${selectedBuyToken} (attempt ${attempt}/${maxAttempts})`
+                );
+                return quoteValue;
             } else {
-                console.warn(`${lh} - Buy token quote input not found on attempt ${attempts + 1}/${maxAttempts}. Retrying after ${delay}ms...`);
+                console.log(
+                    `${lh} - ⚠️ Buy token quote element found but value not ready ("${quoteText}"), retrying (${attempt}/${maxAttempts})...`
+                );
             }
-            attempts++;
-            await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+            console.log(
+                `${lh} - ⏳ Buy token quote input not found (attempt ${attempt}/${maxAttempts})...`
+            );
         }
 
-        console.error(`${lh} - Failed to scrape valid buy token quote after ${maxAttempts} attempts. Using previous swapAmount: ${swapAmount}`);
-        return swapAmount;
-    };
+        await new Promise((r) => setTimeout(r, delay));
+    }
+
+    console.warn(
+        `${lh} - ⚠️ Failed to scrape a valid buy token quote after ${maxAttempts} attempts. Using previous swapAmount: ${swapAmount}`
+    );
+    return swapAmount;
+};
 
     let nextSwapBuyAmount = null;
     if (isRewardSwapsMode) {
@@ -2815,7 +3063,69 @@ async function performSwap() {
         return;
     }
 
-    swapButton.click();
+    // Now wait for button to become enabled after amount is set
+    console.log(`${lh} - Amount set, waiting for swap button to become enabled...`);
+    let enableWaitAttempts = 0;
+    const maxEnableWaitAttempts = 15; // 15 seconds max
+    
+    while (enableWaitAttempts < maxEnableWaitAttempts) {
+        swapButton = getSwapButton(false);
+        if (swapButton) {
+            const isDisabled = swapButton.disabled || 
+                             swapButton.className.includes('cursor-not-allowed') || 
+                             swapButton.className.includes('pointer-events-none');
+            
+            if (!isDisabled) {
+                console.log(`${lh} - ✅ Swap button enabled after ${enableWaitAttempts}s`);
+                break;
+            }
+        }
+        console.log(`${lh} - Waiting for button to enable... (${enableWaitAttempts + 1}/${maxEnableWaitAttempts})`);
+        await new Promise(r => setTimeout(r, 1000));
+        enableWaitAttempts++;
+    }
+    
+    if (enableWaitAttempts >= maxEnableWaitAttempts) {
+        console.error(`${lh} - Swap button still disabled after ${maxEnableWaitAttempts}s. Stopping.`);
+        notifyUser('Pond0x Error', 'Swap button did not enable after setting amount.');
+        updateLog('Button timeout');
+        isSwapping = false;
+        await GM.setValue('pond0xIsSwapping', false);
+        isSwapRunning = false;
+        await GM.setValue('pond0xIsSwapRunning', false);
+        const swapToggleBtn = document.getElementById('swapToggleBtn');
+        if (swapToggleBtn) {
+            swapToggleBtn.textContent = 'Start Swapping';
+            swapToggleBtn.style.background = '#28a745';
+            swapToggleBtn.style.color = 'white';
+            swapToggleBtn.disabled = false;
+        }
+        return;
+    }
+
+    // Try multiple click methods for reliability
+    console.log(`${lh} - 🖱️ Attempting to click swap button. Text: "${swapButton.textContent}", Class: ${swapButton.className}`);
+    try {
+        // Method 1: Direct click
+        swapButton.click();
+        console.log(`${lh} - ✅ Direct click executed`);
+    } catch (e1) {
+        console.warn(`${lh} - Direct click failed, trying MouseEvent...`, e1);
+        try {
+            // Method 2: MouseEvent
+            const clickEvent = new MouseEvent('click', { 
+                bubbles: true, 
+                cancelable: true, 
+                view: window,
+                composed: true // Important for shadow DOM
+            });
+            swapButton.dispatchEvent(clickEvent);
+            console.log(`${lh} - ✅ MouseEvent click executed`);
+        } catch (e2) {
+            console.error(`${lh} - ❌ Both click methods failed!`, e2);
+        }
+    }
+    
     console.log(`${lh} - Swap button clicked at ${new Date().toISOString()} with amount ${swapAmount} ${selectedSellToken}.`);
     updateLog('Swap clicked');
 
@@ -2826,8 +3136,8 @@ async function performSwap() {
 
     while (isSwapping && !swapCompleted) {
         await new Promise(resolve => setTimeout(resolve, 1000));
-        swapButton = document.querySelector('.text-xl.btntxt') || document.querySelector('[class*="btntxt"]');
-        if (!swapButton || !document.body.contains(swapButton)) {
+        swapButton = getSwapButton();
+        if (!swapButton) {
             console.error(`${lh} - Swap button not found during swap process. Possible rejection or page change. Stopping.`);
             notifyUser('Pond0x Warning', 'Swap button not found during swap. Stopping.');
             updateLog('Button lost');
@@ -2848,7 +3158,65 @@ async function performSwap() {
         const buttonText = swapButton.textContent.toLowerCase();
         const timeElapsed = Date.now() - stuckStartTime;
 
-        if (buttonText.includes('swap again')) {
+if (buttonText.includes('swap more')) {
+    console.log(`${lh} - 🆕 Detected 'Swap More' state, initiating click sequence...`);
+    updateLog('Swap More detected');
+
+    let clicked = false;
+    const maxWait = 15000; // wait up to 15s for new button if UI lags
+    const pollInterval = 1000;
+    const startTime = Date.now();
+
+    while (!clicked && Date.now() - startTime < maxWait && isSwapping) {
+        const host = document.querySelector("#jupiter-plugin-instance > div");
+        const root = host?.shadowRoot;
+        if (root) {
+            const swapMoreBtn = [...root.querySelectorAll("button")]
+                .find(b => /swap more/i.test(b.textContent || ""));
+            if (swapMoreBtn) {
+                try {
+                    const rect = swapMoreBtn.getBoundingClientRect();
+                    const opts = {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window,
+                        clientX: rect.left + rect.width / 2,
+                        clientY: rect.top + rect.height / 2
+                    };
+                    swapMoreBtn.dispatchEvent(new MouseEvent("mouseover", opts));
+                    swapMoreBtn.dispatchEvent(new MouseEvent("mousedown", opts));
+                    swapMoreBtn.dispatchEvent(new MouseEvent("mouseup", opts));
+                    swapMoreBtn.dispatchEvent(new MouseEvent("click", opts));
+
+                    console.log(`${lh} - ✅ Clicked 'Swap More' button successfully.`);
+                    updateLog('Clicked Swap More');
+                    clicked = true;
+                    break;
+                } catch (err) {
+                    console.error(`${lh} - ⚠️ Error clicking 'Swap More':`, err);
+                }
+            }
+        }
+        console.log(`${lh} - Waiting for 'Swap More' button... (${Math.floor((Date.now() - startTime) / 1000)}s elapsed)`);
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    if (!clicked) {
+        console.warn(`${lh} - 'Swap More' not clickable after ${maxWait / 1000}s. Keeping swapper alive.`);
+        updateLog("Swap More timeout (continuing)");
+    } else {
+        swapCounter++;
+        await GM.setValue('pond0xSwapCounter', swapCounter);
+        document.getElementById('swapCounter').textContent = `Swaps Completed: ${swapCounter}`;
+        notifyUser('Pond0x Swap', `Swap #${swapCounter} completed successfully (Sell: ${selectedSellToken}, Buy: ${selectedBuyToken}).`);
+        updateLog(`Swap #${swapCounter} done`);
+        swapCompleted = true;
+    }
+
+    continue; // Prevent hitting "Unexpected button state"
+
+}
+ else if (buttonText.includes('swap again')) {
             console.log(`${lh} - Swap button on 'swap again'. Completing swap...`);
             updateLog('Swap again');
             let retryAttempts = 0;
@@ -2857,7 +3225,7 @@ async function performSwap() {
                 swapButton.click();
                 console.log(`${lh} - Attempt ${retryAttempts + 1}/${maxRetryAttempts}: Clicked 'Swap Again' at ${new Date().toISOString()}`);
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                swapButton = document.querySelector('.text-xl.btntxt') || document.querySelector('[class*="btntxt"]');
+                swapButton = getSwapButton();
                 if (!swapButton) {
                     console.error(`${lh} - Swap button disappeared after clicking 'Swap Again'. Stopping.`);
                     updateLog('Button lost');
@@ -2905,7 +3273,14 @@ async function performSwap() {
             swapButton.click();
             stuckStartTime = Date.now();
             rejectionDetected = true;
-        } else if (buttonText.includes('swapping') || buttonText.includes('pending') || buttonText.includes('pending approvals') || buttonText.includes('preparing transactions')) {
+        } else if (
+    buttonText.includes('swapping') ||
+    buttonText.includes('pending') ||
+    buttonText.includes('pending approvals') ||
+    buttonText.includes('preparing transactions') ||
+    buttonText.includes('sending') ||
+    buttonText.includes('sent')
+) {
             console.log(`${lh} - Swap in ${buttonText} state for ${timeElapsed}ms...`);
             updateLog(`${buttonText}`);
             if (timeElapsed > SWAP_STUCK_TIMEOUT) {
@@ -2969,75 +3344,79 @@ async function performSwap() {
     }
 
     if (swapCompleted && isSwapping) {
-        // Handle direction change for Cycle Swaps mode
-        if (isRewardSwapsMode) {
-            console.log(`${lh} - Reward swaps mode active, attempting to change swap direction...`);
-            const directionSuccess = await clickSwapDirectionButton();
-            if (!directionSuccess) {
-                console.error(`${lh} - Failed to swap direction. Stopping.`);
-                isSwapping = false;
-                await GM.setValue('pond0xIsSwapping', false);
-                isSwapRunning = false;
-                await GM.setValue('pond0xIsSwapRunning', false);
-                const swapToggleBtn = document.getElementById('swapToggleBtn');
-                if (swapToggleBtn) {
-                    swapToggleBtn.textContent = 'Start Swapping';
-                    swapToggleBtn.style.background = '#28a745';
-                    swapToggleBtn.style.color = 'white';
-                    swapToggleBtn.disabled = false;
-                }
-                return;
-            }
+ if (isRewardSwapsMode) {
+    console.log(`${lh} - Reward swaps mode active, capturing received amount and flipping direction...`);
 
-            const tempToken = selectedSellToken;
-            selectedSellToken = selectedBuyToken;
-            selectedBuyToken = tempToken;
-            await GM.setValue('pond0xSelectedSellToken', selectedSellToken);
-            await GM.setValue('pond0xSelectedBuyToken', selectedBuyToken);
-            await GM.setValue('pond0xLastSelectedSellToken', selectedSellToken);
-            await GM.setValue('pond0xLastSelectedBuyToken', selectedBuyToken);
-            lastSwapDirection = `${selectedSellToken}to${selectedBuyToken}`;
-            await GM.setValue('pond0xLastSwapDirection', lastSwapDirection);
-            console.log(`${lh} - Swapped direction: Sell=${selectedSellToken}, Buy=${selectedBuyToken}`);
+    const receivedAmount = await getYouReceiveAmount();
+    if (receivedAmount) {
+        await GM.setValue('pond0xLastReceivedAmount', receivedAmount);
+    }
 
-            const currentPair = `${selectedSellToken}to${selectedBuyToken}`.toLowerCase();
-            const userOriginalPair = `${userSelectedSellToken}to${userSelectedBuyToken}`.toLowerCase();
-            const reverseUserOriginalPair = `${userSelectedBuyToken}to${userSelectedSellToken}`.toLowerCase();
-
-            if (currentPair === reverseUserOriginalPair) {
-                swapAmount = nextSwapBuyAmount || swapAmount;
-                console.log(`${lh} - Reversed to (${currentPair}). Using scraped buy token quote: ${swapAmount} ${selectedSellToken}`);
-                updateLog(`New amount: ${swapAmount} ${selectedSellToken}`);
-            } else if (currentPair === userOriginalPair) {
-                swapAmount = userSetAmount; // Use userSetAmount for original pair
-                console.log(`${lh} - Returned to original pair (${currentPair}). Restored user-set amount: ${swapAmount} ${selectedSellToken}`);
-                updateLog(`Restored amount: ${swapAmount} ${selectedSellToken}`);
-            }
-
-            await GM.setValue('pond0xSwapAmount', swapAmount);
-            await GM.setValue('pond0xLastSwapAmount', swapAmount);
-
-            const amountSet = await updateAmountInput();
-            if (!amountSet) {
-                console.error(`${lh} - Failed to reinput amount after direction swap. Stopping.`);
-                notifyUser('Pond0x Error', 'Failed to reinput amount after direction swap.');
-                updateLog('Amount reinput failed');
-                isSwapping = false;
-                await GM.setValue('pond0xIsSwapping', false);
-                isSwapRunning = false;
-                await GM.setValue('pond0xIsSwapRunning', false);
-                const swapToggleBtn = document.getElementById('swapToggleBtn');
-                if (swapToggleBtn) {
-                    swapToggleBtn.textContent = 'Start Swapping';
-                    swapToggleBtn.style.background = '#28a745';
-                    swapToggleBtn.style.color = 'white';
-                    swapToggleBtn.disabled = false;
-                }
-                return;
-            }
-        } else {
-            console.log(`${lh} - Reward swaps mode is off, maintaining current swap direction.`);
+    const directionSuccess = await clickSwapDirectionButton();
+    if (!directionSuccess) {
+        console.error(`${lh} - Failed to swap direction. Stopping.`);
+        isSwapping = false;
+        await GM.setValue('pond0xIsSwapping', false);
+        isSwapRunning = false;
+        await GM.setValue('pond0xIsSwapRunning', false);
+        const swapToggleBtn = document.getElementById('swapToggleBtn');
+        if (swapToggleBtn) {
+            swapToggleBtn.textContent = 'Start Swapping';
+            swapToggleBtn.style.background = '#28a745';
+            swapToggleBtn.style.color = 'white';
+            swapToggleBtn.disabled = false;
         }
+        return;
+    }
+
+    const tempToken = selectedSellToken;
+    selectedSellToken = selectedBuyToken;
+    selectedBuyToken = tempToken;
+    await GM.setValue('pond0xSelectedSellToken', selectedSellToken);
+    await GM.setValue('pond0xSelectedBuyToken', selectedBuyToken);
+    lastSwapDirection = `${selectedSellToken}to${selectedBuyToken}`;
+    await GM.setValue('pond0xLastSwapDirection', lastSwapDirection);
+    console.log(`${lh} - Swapped direction: Sell=${selectedSellToken}, Buy=${selectedBuyToken}`);
+
+    // determine which amount to use
+    const currentPair = `${selectedSellToken}to${selectedBuyToken}`.toLowerCase();
+    const userOriginalPair = `${userSelectedSellToken}to${userSelectedBuyToken}`.toLowerCase();
+    const reverseUserOriginalPair = `${userSelectedBuyToken}to${userSelectedSellToken}`.toLowerCase();
+
+    if (currentPair === reverseUserOriginalPair) {
+        // now selling what was just received
+        swapAmount = receivedAmount || swapAmount;
+        console.log(`${lh} - Using previous "You Receive" amount: ${swapAmount} ${selectedSellToken}`);
+        updateLog(`New amount from previous receive: ${swapAmount} ${selectedSellToken}`);
+    } else if (currentPair === userOriginalPair) {
+        // returning to original direction
+        swapAmount = userSetAmount;
+        console.log(`${lh} - Returning to original direction; using control panel amount: ${swapAmount} ${selectedSellToken}`);
+        updateLog(`Restored user-set amount: ${swapAmount} ${selectedSellToken}`);
+    }
+
+    await GM.setValue('pond0xSwapAmount', swapAmount);
+    await GM.setValue('pond0xLastSwapAmount', swapAmount);
+
+    const amountSet = await updateAmountInput();
+    if (!amountSet) {
+        console.error(`${lh} - Failed to reinput amount after direction swap. Stopping.`);
+        notifyUser('Pond0x Error', 'Failed to reinput amount after direction swap.');
+        updateLog('Amount reinput failed');
+        isSwapping = false;
+        await GM.setValue('pond0xIsSwapping', false);
+        isSwapRunning = false;
+        await GM.setValue('pond0xIsSwapRunning', false);
+        const swapToggleBtn = document.getElementById('swapToggleBtn');
+        if (swapToggleBtn) {
+            swapToggleBtn.textContent = 'Start Swapping';
+            swapToggleBtn.style.background = '#28a745';
+            swapToggleBtn.style.color = 'white';
+            swapToggleBtn.disabled = false;
+        }
+        return;
+    }
+}
 
         // Handle referral mode redirect for every swap
         if (isReferralMode) {
@@ -3059,28 +3438,65 @@ async function performSwap() {
 }
 
 async function clickSwapDirectionButton() {
-    console.log(`${lh} - Attempting to click the swap direction button...`);
-    const swapDirectionButton = document.querySelector('div.block svg.icons-sc-71agnn-0.KVxRw');
-    if (!swapDirectionButton) {
-        console.error(`${lh} - Swap direction button not found.`);
-        notifyUser('Pond0x Error', 'Swap direction button not found.');
-        updateLog('Direction button missing');
-        return false;
+    console.log(`${lh} - Attempting to locate and click swap direction (↔️) button...`);
+    updateLog('Locating swap direction button');
+
+    const maxAttempts = 10;
+    const interval = 1000;
+
+    for (let i = 0; i < maxAttempts; i++) {
+        const host = document.querySelector("#jupiter-plugin-instance > div");
+        const root = host?.shadowRoot;
+        if (root) {
+            // Primary: the exact path you provided (SVG element)
+            let svg = root.querySelector(
+                "#jupiter-plugin > div > form > div > div.w-full.mt-2.rounded-xl.flex.flex-col.px-2 > div > div.relative.z-10.-my-3.flex.justify-center > div > div > svg"
+            );
+
+            // Fallback: any button or div that looks like a swap-direction control
+            if (!svg) {
+                svg = [...root.querySelectorAll("svg")].find(
+                    el =>
+                        el.innerHTML.includes("path") &&
+                        el.parentElement?.innerHTML.includes("path") &&
+                        el.closest("div.flex.justify-center")
+                );
+            }
+
+            const clickable = svg?.parentElement || svg;
+
+            if (clickable) {
+                try {
+                    const rect = clickable.getBoundingClientRect();
+                    const opts = {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window,
+                        clientX: rect.left + rect.width / 2,
+                        clientY: rect.top + rect.height / 2
+                    };
+                    clickable.dispatchEvent(new MouseEvent("mouseover", opts));
+                    clickable.dispatchEvent(new MouseEvent("mousedown", opts));
+                    clickable.dispatchEvent(new MouseEvent("mouseup", opts));
+                    clickable.dispatchEvent(new MouseEvent("click", opts));
+
+                    console.log(`${lh} - ✅ Clicked swap direction control successfully.`);
+                    updateLog('Swap direction button clicked');
+                    return true;
+                } catch (err) {
+                    console.error(`${lh} - ⚠️ Error clicking swap direction control:`, err);
+                    updateLog('Swap direction click error');
+                }
+            }
+        }
+
+        console.log(`${lh} - Swap direction element not found (attempt ${i + 1}/${maxAttempts})...`);
+        await new Promise(r => setTimeout(r, interval));
     }
 
-    const parentDiv = swapDirectionButton.closest('div.block');
-    if (!parentDiv) {
-        console.error(`${lh} - Parent div for swap direction button not found.`);
-        notifyUser('Pond0x Error', 'Parent div for swap direction button not found.');
-        updateLog('Direction parent missing');
-        return false;
-    }
-
-    parentDiv.click();
-    console.log(`${lh} - Swap direction button clicked at ${new Date().toISOString()}.`);
-    updateLog('Direction swapped');
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    return true;
+    console.error(`${lh} - ❌ Failed to find swap direction control after ${maxAttempts} attempts.`);
+    updateLog('Swap direction not found');
+    return false;
 }
 
 function reInjectControlPanel() {
@@ -3135,62 +3551,61 @@ function reInjectControlPanel() {
 }
 
 async function updateAmountInput() {
-    try {
-        console.log(`${lh} - Attempting to update amount input to ${swapAmount} ${selectedSellToken}...`);
-        const sellSection = Array.from(document.querySelectorAll('div.py-5.px-4.flex.flex-col.dark\\:text-white.border.border-transparent.group')).find(div => 
-            div.querySelector('div.text-left.text-white\\/50.text-\\[13px\\]')?.textContent.includes('You Pay')
-        );
-        if (!sellSection) {
-            console.error(`${lh} - "You Pay" section not found.`);
-            notifyUser('Pond0x Warning', '"You Pay" section not found.');
-            updateLog('"You Pay" section missing');
-            return false;
-        }
+    const lh = '[Pond0x-AutoSwapper]';
+    console.log(`${lh} - Attempting to update the "You Pay" amount input...`);
 
-        let amountInput = sellSection.querySelector('input.h-full.w-full.bg-transparent.text-white.text-left.text-2xl.sm\\:text-4xl.placeholder\\:text-2xl.sm\\:placeholder\\:text-4xl');
-        if (!amountInput) {
-            console.error(`${lh} - Amount input field not found in "You Pay" section.`);
-            notifyUser('Pond0x Warning', 'Amount input field not found in "You Pay" section.');
-            updateLog('Sell input not found');
-            return false;
-        }
-
-        amountInput.focus();
-        amountInput.value = swapAmount.toString();
-        amountInput.dispatchEvent(new Event('input', { bubbles: true }));
-        amountInput.dispatchEvent(new Event('change', { bubbles: true }));
-        console.log(`${lh} - Amount input set to ${swapAmount} ${selectedSellToken} in "You Pay" field.`);
-
-        let attempts = 0;
-        const maxAttempts = 5;
-        const delay = 500;
-
-        while (attempts < maxAttempts) {
-            const inputValue = parseFloat(amountInput.value.replace(/,/g, ''));
-            if (Math.abs(inputValue - swapAmount) < 0.0001) {
-                console.log(`${lh} - Amount input verified as ${swapAmount} ${selectedSellToken} after ${attempts + 1} attempts (within tolerance).`);
-                updateLog(`Amount: ${swapAmount}`);
-                return true;
-            }
-            console.warn(`${lh} - Amount input value ${inputValue} does not match ${swapAmount} within tolerance on attempt ${attempts + 1}/${maxAttempts}. Retrying...`);
-            amountInput.value = swapAmount.toString();
-            amountInput.dispatchEvent(new Event('input', { bubbles: true }));
-            amountInput.dispatchEvent(new Event('change', { bubbles: true }));
-            await new Promise(resolve => setTimeout(resolve, delay));
-            attempts++;
-        }
-
-        console.error(`${lh} - Failed to verify amount input as ${swapAmount} ${selectedSellToken} after ${maxAttempts} attempts.`);
-        notifyUser('Pond0x Warning', `Failed to set amount to ${swapAmount} ${selectedSellToken}.`);
-        updateLog('Amount verify failed');
-        return false;
-    } catch (error) {
-        console.error(`${lh} - Error updating amount input at ${new Date().toISOString()}:`, error);
-        notifyUser('Pond0x Error', `Error setting amount: ${error.message}`);
-        updateLog(`Error: ${error.message}`);
+    const root = document.querySelector("#jupiter-plugin-instance > div")?.shadowRoot;
+    if (!root) {
+        console.error(`${lh} - ShadowRoot not found for Jupiter plugin`);
         return false;
     }
+
+    // Look for the parent section that contains "You pay" or similar
+    let amountInput = null;
+    const payLabelNodes = [...root.querySelectorAll('*')]
+        .filter(el => el.textContent?.trim().toLowerCase().includes('you pay'));
+
+    for (const node of payLabelNodes) {
+        const candidate = node.closest('div')?.querySelector('input[placeholder="0.00"]');
+        if (candidate && candidate.offsetParent !== null) {
+            amountInput = candidate;
+            break;
+        }
+    }
+
+    // Fallback: first visible input field
+    if (!amountInput) {
+        const candidates = [...root.querySelectorAll('input[placeholder="0.00"]')];
+        amountInput = candidates.find(el => el.offsetParent !== null);
+    }
+
+    if (!amountInput) {
+        console.error(`${lh} - ❌ Unable to find "You Pay" input`);
+        return false;
+    }
+
+    console.log(`${lh} - ✅ Found "You Pay" input element:`, amountInput);
+
+    // Focus, clear, and type
+    amountInput.click();
+    amountInput.focus();
+    amountInput.value = '';
+    amountInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const amountValue = String(await GM.getValue('pond0xSwapAmount', 0.01));
+    for (const char of amountValue) {
+        const keyEvt = { key: char, bubbles: true };
+        amountInput.dispatchEvent(new KeyboardEvent('keydown', keyEvt));
+        amountInput.value += char;
+        amountInput.dispatchEvent(new Event('input', { bubbles: true }));
+        amountInput.dispatchEvent(new KeyboardEvent('keyup', keyEvt));
+        await new Promise(r => setTimeout(r, 35));
+    }
+
+    console.log(`${lh} - 💰 Entered amount ${amountValue} successfully`);
+    return true;
 }
+
 
 async function setupTokensAndAmount() {
     if (isSettingUp) {
@@ -3206,12 +3621,12 @@ async function setupTokensAndAmount() {
             let attempts = 0;
             const maxAttempts = 15;
             const check = () => {
-                const dropdowns = document.querySelectorAll('form button.rounded-full.flex.items-center');
-                if (dropdowns.length >= 2 && Array.from(dropdowns).every(d => d.offsetWidth > 0 && d.offsetHeight > 0)) {
-                    console.log(`${lh} - Found ${dropdowns.length} dropdowns after ${attempts * 1000}ms`);
+                const dropdowns = getTokenDropdowns(); // Use the new helper function
+                if (dropdowns.length >= 2) {
+                    console.log(`${lh} - Found ${dropdowns.length} dropdowns in shadow DOM after ${attempts * 1000}ms`);
                     resolve(dropdowns);
                 } else if (attempts >= maxAttempts) {
-                    console.error(`${lh} - Dropdowns not found after ${maxAttempts * 1000}ms`);
+                    console.error(`${lh} - Dropdowns not found in shadow DOM after ${maxAttempts * 1000}ms`);
                     resolve([]);
                 } else {
                     attempts++;
@@ -3247,38 +3662,141 @@ async function setupTokensAndAmount() {
             dropdown.click();
             await new Promise(resolve => setTimeout(resolve, 1000)); // Increased delay
 
-            const searchBar = await new Promise(resolve => {
-                let attempts = 0;
-                const maxAttempts = 10;
-                const check = () => {
-                    const searchBar = document.querySelector('input[placeholder="Search"]');
-                    if (searchBar && searchBar.offsetWidth > 0 && searchBar.offsetHeight > 0) {
-                        resolve(searchBar);
-                    } else if (attempts >= maxAttempts) {
-                        resolve(null);
-                    } else {
-                        attempts++;
-                        setTimeout(check, 1000);
-                    }
-                };
-                check();
-            });
+// ===== Wait for search bar in shadow DOM =====
+let searchBar;
+for (let i = 0; i < 20; i++) { // wait up to ~4 seconds (20 × 200ms)
+    searchBar = getSearchInput();
+    if (searchBar && searchBar.offsetWidth > 0 && searchBar.offsetHeight > 0) break;
+    await new Promise(r => setTimeout(r, 200));
+}
 
-            if (!searchBar) {
-                console.error(`${lh} - Search bar not found for ${tokenName}.`);
-                notifyUser('Pond0x Warning', `Search bar not found for ${tokenName}.`);
-                updateLog('Search bar missing');
-                return false;
-            }
+if (!searchBar) {
+    console.error(`${lh} - Search bar not found after waiting for ${tokenConfig.symbol}.`);
+    notifyUser('Pond0x Warning', `Search bar not found for ${tokenConfig.symbol}.`);
+    updateLog('Search bar missing');
+    return false;
+}
 
-            console.log(`${lh} - Inputting ${tokenName} address: ${tokenConfig.address}`);
-            searchBar.focus();
-            searchBar.value = '';
-            await new Promise(resolve => setTimeout(resolve, 200));
-            searchBar.value = tokenConfig.address;
-            searchBar.dispatchEvent(new Event('input', { bubbles: true }));
-            searchBar.dispatchEvent(new Event('change', { bubbles: true }));
-            await new Promise(resolve => setTimeout(resolve, 1500)); // Increased delay
+console.log(`${lh} - Search bar detected, proceeding to type ${tokenConfig.address}`);
+await typeIntoSearch(searchBar, tokenConfig.address);
+await new Promise(resolve => setTimeout(resolve, 1500));
+
+// ===== SELECT FIRST SEARCH RESULT (TARGETING LI.rounded.cursor-pointer) =====
+console.log(`${lh} - Attempting to select first token search result...`);
+
+let resultItem = null;
+let resultScanCount = 0;
+
+while (!resultItem && resultScanCount < 25) {
+    const root = document.querySelector("#jupiter-plugin-instance > div").shadowRoot;
+    if (root) {
+        resultItem = root.querySelector(
+            "li.rounded.cursor-pointer.px-5.my-1.list-none.flex.w-full.items-center"
+        );
+        if (resultItem && resultItem.offsetWidth > 0 && resultItem.offsetHeight > 0) break;
+    }
+    await new Promise(r => setTimeout(r, 200));
+    resultScanCount++;
+}
+
+if (!resultItem) {
+    console.error(`${lh} - No token search results found for ${tokenConfig.symbol}.`);
+    notifyUser('Pond0x Warning', `No token results found for ${tokenConfig.symbol}.`);
+    updateLog('Token search result missing');
+    return false;
+}
+
+// ===== CLICK THE RESULT ITEM =====
+console.log(`${lh} - Selecting token search result element...`, resultItem);
+
+try {
+    resultItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const rect = resultItem.getBoundingClientRect();
+    const evtOpts = {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        pointerType: "mouse",
+        isPrimary: true,
+        view: window
+    };
+
+    // Dispatch pointer events instead of just MouseEvents
+    resultItem.dispatchEvent(new PointerEvent("pointerover", evtOpts));
+    resultItem.dispatchEvent(new PointerEvent("pointerdown", evtOpts));
+    resultItem.dispatchEvent(new PointerEvent("pointerup", evtOpts));
+
+    // Fallback MouseEvents for frameworks that still listen for them
+    resultItem.dispatchEvent(new MouseEvent("mouseover", evtOpts));
+    resultItem.dispatchEvent(new MouseEvent("mousedown", evtOpts));
+    resultItem.dispatchEvent(new MouseEvent("mouseup", evtOpts));
+    resultItem.dispatchEvent(new MouseEvent("click", evtOpts));
+
+    console.log(`${lh} - ✅ Pointer+Mouse click simulation complete for ${tokenConfig.symbol}.`);
+} catch (err) {
+    console.error(`${lh} - Error clicking token result:`, err);
+}
+
+await new Promise(resolve => setTimeout(resolve, 1000));
+if (isSellToken) {
+    console.log(`${lh} - ✅ Sell token selected successfully, moving on to Buy token setup.`);
+    return true;
+}
+if (!isSellToken) {
+    console.log(`${lh} - ✅ Buy token selected successfully, moving on to amount setup.`);
+    return true;
+}
+// === Find the "You Pay" amount input ===
+const root = document.querySelector("#jupiter-plugin-instance > div").shadowRoot;
+
+let amountInput = null;
+
+// Look for a label or container that includes "You Pay"
+const paySections = [...root.querySelectorAll("*")].filter(
+    el => el.textContent?.trim().toLowerCase().includes("you pay")
+);
+
+// Find the first visible input inside that section
+for (const section of paySections) {
+    const input = section.querySelector('input[placeholder="0.00"]');
+    if (input && input.offsetParent !== null) {
+        amountInput = input;
+        break;
+    }
+}
+
+// If we still didn't find it, fallback to first visible "0.00" input
+if (!amountInput) {
+    amountInput = [...root.querySelectorAll('input[placeholder="0.00"]')]
+        .find(el => el.offsetParent !== null);
+}
+
+if (!amountInput) {
+    console.error(`${lh} - ❌ Failed to locate "You Pay" amount input.`);
+    return false;
+}
+
+console.log(`${lh} - ✅ Found "You Pay" input:`, amountInput);
+
+// Focus and type amount
+amountInput.click();
+amountInput.focus();
+amountInput.value = "";
+amountInput.dispatchEvent(new Event("input", { bubbles: true }));
+
+const amount = "1"; // set your desired input amount
+for (const char of amount) {
+    const eventProps = { key: char, bubbles: true };
+    amountInput.dispatchEvent(new KeyboardEvent("keydown", eventProps));
+    amountInput.value += char;
+    amountInput.dispatchEvent(new Event("input", { bubbles: true }));
+    amountInput.dispatchEvent(new KeyboardEvent("keyup", eventProps));
+    await new Promise(r => setTimeout(r, 40));
+}
+
+console.log(`${lh} - 💰 Entered amount: ${amount}`);
 
             let attempts = 0;
             const maxAttempts = 10;
@@ -3371,7 +3889,7 @@ async function setupTokensAndAmount() {
                 if (attempts < maxAttempts) {
                     dropdown.click();
                     await new Promise(resolve => setTimeout(resolve, 1000));
-                    const newSearchBar = document.querySelector('input[placeholder="Search"]');
+                    const newSearchBar = getSearchInput();
                     if (newSearchBar) {
                         newSearchBar.value = tokenConfig.address;
                         newSearchBar.dispatchEvent(new Event('input', { bubbles: true }));
@@ -3433,11 +3951,11 @@ async function setupTokensAndAmount() {
 
 function waitForPageReady() {
     return new Promise((resolve) => {
-        const maxWaitTime = 15000;
+        const maxWaitTime = 5000;
         const startTime = Date.now();
 
         const checkReady = () => {
-            swapButton = document.querySelector('.text-xl.btntxt') || document.querySelector('[class*="btntxt"]');
+            swapButton = getSwapButton();
             const connectWalletButton = document.querySelector('div.p-5.text-md.font-semibold.h-full.w-full.leading-none');
             const isSwapVisible = swapButton && swapButton.offsetWidth > 0 && swapButton.offsetHeight > 0;
             const isConnectVisible = connectWalletButton && connectWalletButton.textContent.includes('Connect Wallet');
@@ -3456,7 +3974,7 @@ function waitForPageReady() {
                             phantomButton.closest('button').click();
                             updateLog('Selected Phantom');
                             setTimeout(() => {
-                                swapButton = document.querySelector('.text-xl.btntxt') || document.querySelector('[class*="btntxt"]');
+                                swapButton = getSwapButton();
                                 if (swapButton && swapButton.offsetWidth > 0 && swapButton.offsetHeight > 0) {
                                     console.log(`${lh} - Swap button appeared after wallet connection.`);
                                     proceedWithSwapReady();
@@ -3560,23 +4078,24 @@ function waitForPageReady() {
     });
 }
 
+
 function waitForSwapButton() {
     return new Promise((resolve) => {
-        console.log(`${lh} - Waiting for swap button in DOM...`);
+        console.log(`${lh} - Waiting for swap button in shadow DOM...`);
         let attempts = 0;
         const maxAttempts = 15;
 
         const checkButton = () => {
-            swapButton = document.querySelector('.text-xl.btntxt') || document.querySelector('[class*="btntxt"]');
+            swapButton = getSwapButton(); // Use the new helper function
             const isVisible = swapButton && swapButton.offsetWidth > 0 && swapButton.offsetHeight > 0;
             if (swapButton && isVisible) {
-                console.log(`${lh} - Swap button found in DOM after ${attempts * 500}ms`);
+                console.log(`${lh} - Swap button found in shadow DOM after ${attempts * 500}ms`);
                 resolve(swapButton);
                 return;
             }
             attempts++;
             if (attempts >= maxAttempts) {
-                console.error(`${lh} - Swap button not found after ${maxAttempts * 500}ms, resolving with null...`);
+                console.error(`${lh} - Swap button not found in shadow DOM after ${maxAttempts * 500}ms, resolving with null...`);
                 resolve(null);
                 return;
             }
@@ -3585,6 +4104,7 @@ function waitForSwapButton() {
         checkButton();
     });
 }
+
 
 async function fetchManifestSwaps(walletAddress) {
     return new Promise((resolve) => {
