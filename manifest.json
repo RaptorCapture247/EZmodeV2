@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "EzmodeV2",
-    "version": "4.2.0.699",
+    "version": "4.2.0.7",
     "description": "Automates Participation on Pond0x",
     "permissions": [
         "storage",
