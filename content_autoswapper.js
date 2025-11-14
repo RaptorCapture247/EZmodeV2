@@ -3586,23 +3586,86 @@ async function updateAmountInput() {
 
     console.log(`${lh} - ✅ Found "You Pay" input element:`, amountInput);
 
-    // Focus, clear, and type
-    amountInput.click();
-    amountInput.focus();
-    amountInput.value = '';
-    amountInput.dispatchEvent(new Event('input', { bubbles: true }));
-
     const amountValue = String(await GM.getValue('pond0xSwapAmount', 0.01));
-    for (const char of amountValue) {
-        const keyEvt = { key: char, bubbles: true };
-        amountInput.dispatchEvent(new KeyboardEvent('keydown', keyEvt));
-        amountInput.value += char;
+    console.log(`${lh} - Target amount to enter: ${amountValue}`);
+
+    // Multiple clearing attempts to ensure field is completely empty
+    for (let i = 0; i < 3; i++) {
+        amountInput.click();
+        amountInput.focus();
+        await new Promise(r => setTimeout(r, 50));
+        
+        // Select all and delete
+        amountInput.select();
+        document.execCommand('delete');
+        
+        // Also set value to empty string
+        amountInput.value = '';
         amountInput.dispatchEvent(new Event('input', { bubbles: true }));
-        amountInput.dispatchEvent(new KeyboardEvent('keyup', keyEvt));
-        await new Promise(r => setTimeout(r, 35));
+        amountInput.dispatchEvent(new Event('change', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 50));
+        
+        // Verify field is actually empty
+        if (amountInput.value === '' || amountInput.value === '0') {
+            console.log(`${lh} - Field cleared successfully on attempt ${i + 1}`);
+            break;
+        } else {
+            console.warn(`${lh} - Field not empty after attempt ${i + 1}, value: "${amountInput.value}"`);
+        }
     }
 
-    console.log(`${lh} - 💰 Entered amount ${amountValue} successfully`);
+    // Wait to ensure clearing is complete
+    await new Promise(r => setTimeout(r, 100));
+
+    // Set the value directly instead of character-by-character
+    amountInput.value = amountValue;
+    amountInput.dispatchEvent(new Event('input', { bubbles: true }));
+    amountInput.dispatchEvent(new Event('change', { bubbles: true }));
+    
+    // Trigger keyboard events for better compatibility
+    amountInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    amountInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+    
+    await new Promise(r => setTimeout(r, 200));
+
+    // CRITICAL: Verify the final value matches what we intended
+    const finalValue = amountInput.value;
+    if (finalValue !== amountValue) {
+        console.error(`${lh} - VALUE MISMATCH! Expected: ${amountValue}, Got: ${finalValue}`);
+        console.error(`${lh} - Attempting to correct the value...`);
+        
+        // One more attempt to set it correctly
+        amountInput.value = '';
+        amountInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 100));
+        
+        amountInput.value = amountValue;
+        amountInput.dispatchEvent(new Event('input', { bubbles: true }));
+        amountInput.dispatchEvent(new Event('change', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 200));
+        
+        if (amountInput.value !== amountValue) {
+            console.error(`${lh} - STILL INCORRECT after retry. Expected: ${amountValue}, Got: ${amountInput.value}`);
+            console.warn(`${lh} - Amount verification failed. Reloading page to retry...`);
+            notifyUser('Pond0x Warning', `Amount verification failed (Expected ${amountValue}, got ${amountInput.value}). Reloading...`);
+            updateLog('Amount mismatch, reloading');
+            
+            // Save state before reload so automation can resume
+            await GM.setValue('pond0xLastSwapAmount', swapAmount);
+            await GM.setValue('pond0xLastSelectedSellToken', selectedSellToken);
+            await GM.setValue('pond0xLastSelectedBuyToken', selectedBuyToken);
+            await GM.setValue('pond0xLastIsSwapping', isSwapping);
+            sessionStorage.setItem('pond0xSwapReloaded', 'true');
+            
+            // Reload the page to retry
+            window.location.reload();
+            return false; // This line won't actually execute due to reload, but included for clarity
+        } else {
+            console.log(`${lh} - Value corrected successfully on retry`);
+        }
+    }
+
+    console.log(`${lh} - 💰 Successfully entered and verified amount: ${finalValue}`);
     return true;
 }
 
